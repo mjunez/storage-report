@@ -1,0 +1,13 @@
+[Unit]
+Description=Storage Report HTTP Server (Hermes 2FA Theme)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/storage-report-serve
+Restart=on-failure
+RestartSec=5
+Environment=PATH=%h/.local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

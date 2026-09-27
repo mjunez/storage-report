@@ -1,0 +1,15 @@
+[project]
+name = "storage-report"
+version = "0.1.0"
+description = "Reporte visual de uso de disco con servidor web dinámico"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+storage-report-generate = "storage_report.generator:main"
+storage-report-serve = "storage_report.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
