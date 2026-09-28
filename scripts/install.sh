@@ -30,8 +30,12 @@ fi
 
 echo "Instalando storage-report..."
 
-# 1. Instalar paquete Python (entry points: storage-report-serve, storage-report-generate)
-pip install --user -e "$SOURCE_DIR"
+# Detectar si estamos en un virtualenv (verificando sys.prefix vs sys.base_prefix)
+if python3 -c "import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)"; then
+    pip install -e "$SOURCE_DIR"
+else
+    pip install --user -e "$SOURCE_DIR"
+fi
 
 # 2. Instalar servicio systemd (usa entry point storage-report-serve)
 mkdir -p "$SYSTEMD_DIR"

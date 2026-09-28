@@ -212,10 +212,12 @@ def generate_html():
     # Build HTML using list of strings to avoid formatting conflicts
     html = []
     html.append('<!DOCTYPE html>')
-    html.append('<html lang="en">')
+    html.append('<html lang="en" translate="no">')
     html.append('<head>')
     html.append('<meta charset="UTF-8">')
     html.append('<meta name="viewport" content="width=device-width, initial-scale=1.0">')
+    html.append('<meta name="google" content="notranslate">')
+    html.append('<meta http-equiv="Content-Language" content="en">')
     html.append(f'<title>{tr("title", "en")}</title>')
     html.append('<style>')
     html.append('    :root {')

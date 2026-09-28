@@ -84,5 +84,8 @@ def run():
     httpd = http.server.HTTPServer(server_address, Handler)
     httpd.serve_forever()
 
+def main():
+    run()
+
 if __name__ == "__main__":
     run()
