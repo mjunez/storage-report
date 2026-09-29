@@ -81,7 +81,7 @@ def get_icon_base64():
         pass
     return ""
 
-def generate_html():
+def generate_html(selected_disk=None):
     # Diccionario de traducciones
     TR = {
         'en': {
@@ -171,6 +171,98 @@ def generate_html():
     
     date_str = datetime.now().strftime('%d %b %Y')
     timestamp_str = datetime.now().strftime('%d %b %Y %H:%M')
+    
+    # Obtener discos físicos (incluyendo externos/USB)
+    def get_physical_disks():
+        """Obtiene lista de discos físicos con sus particiones montadas"""
+        disks = []
+        try:
+            out = run_cmd("lsblk -J -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,MODEL 2>/dev/null")
+            if out:
+                import json
+                data = json.loads(out)
+                for device in data.get('blockdevices', []):
+                    if device.get('type') == 'disk':
+                        disk_info = {
+                            'name': device.get('name', ''),
+                            'size': device.get('size', ''),
+                            'model': device.get('model', ''),
+                            'children': []
+                        }
+                        has_mounted = False
+                        for part in device.get('children', []):
+                            if part.get('mountpoint'):
+                                disk_info['children'].append({
+                                    'name': part.get('name', ''),
+                                    'size': part.get('size', ''),
+                                    'mountpoint': part.get('mountpoint', ''),
+                                    'fstype': part.get('fstype', '')
+                                })
+                                has_mounted = True
+                            else:
+                                # Include unmounted partitions too
+                                disk_info['children'].append({
+                                    'name': part.get('name', ''),
+                                    'size': part.get('size', ''),
+                                    'mountpoint': '',
+                                    'fstype': part.get('fstype', '')
+                                })
+                        # Include disk if it has any partitions (mounted or not)
+                        if disk_info['children']:
+                            disks.append(disk_info)
+        except Exception:
+            pass
+        # Fallback: usar df para obtener montajes (only mounted ones)
+        if not disks:
+            df_out = run_cmd("df -h --output=source,target,size,used,avail,pcent,fstype 2>/dev/null | tail -n +2")
+            for line in df_out.strip().split('\n'):
+                parts = line.split()
+                if len(parts) >= 7 and parts[0].startswith('/dev/'):
+                    disks.append({
+                        'name': parts[0].split('/')[-1].split('p')[0],  # disco padre aprox
+                        'size': parts[2],
+                        'model': '',
+                        'children': [{
+                            'name': parts[0],
+                            'size': parts[2],
+                            'mountpoint': parts[1],
+                            'fstype': parts[6]
+                        }]
+                    })
+        return disks
+    
+    # Obtener discos físicos
+    physical_disks = get_physical_disks()
+    
+    # Determinar disco seleccionado y su mountpoint
+    selected_disk_name = selected_disk
+    selected_mountpoint = None
+    selected_disk_info = None
+    if selected_disk_name:
+        for disk in physical_disks:
+            if disk['name'] == selected_disk_name:
+                selected_disk_info = disk
+                # Usar la primera partición montada del disco
+                for part in disk['children']:
+                    if part.get('mountpoint'):
+                        selected_mountpoint = part['mountpoint']
+                        break
+                break
+    
+    df_output = get_disk_info()
+    root_disk = parse_disk_usage(df_output, '/')
+    home_disk = parse_disk_usage(df_output, '/home')
+    boot_disk = parse_disk_usage(df_output, '/boot')
+    
+    # Determinar el uso del disco seleccionado
+    selected_disk_usage = root_disk
+    selected_has_mountpoint = False
+    if selected_mountpoint and selected_mountpoint != '/':
+        selected_disk_usage = parse_disk_usage(df_output, selected_mountpoint)
+        selected_has_mountpoint = True
+    elif selected_disk_name:
+        # Disco seleccionado pero sin mountpoint - no hay uso disponible
+        selected_has_mountpoint = False
     
     # Procesar top files para tabla HTML
     top_files_rows = ""
@@ -420,6 +512,31 @@ def generate_html():
     html.append('    <div class="header">')
     html.append('    <h1 data-i18n="title">' + icon_html + 'Reporte de Almacenamiento</h1>')
     html.append('    <p class="subtitle" data-i18n-html="header_subtitle" data-distro="' + get_distro_name() + '" data-timestamp="' + timestamp_str + '">' + get_distro_name() + ' - Analizado: ' + timestamp_str + '</p>')
+    # Floating div with all three controls aligned horizontally
+    html.append('    <div class="header-floating-controls" style="position:fixed;top:12px;right:12px;z-index:9999;display:flex;align-items:center;gap:0.75rem;">')
+    # Disk selector (leftmost)
+    html.append('        <div class="disk-selector" style="display:flex;align-items:center;gap:0.5rem;">')
+    html.append('            <label for="diskSelect" style="color:var(--muted);font-size:0.85rem;" data-i18n="select_disk">Seleccionar disco:</label>')
+    html.append('            <select id="diskSelect" style="padding:0.35rem 0.75rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;min-width:200px;">')
+    # Default option for root
+    selected_attr = ' selected' if selected_mountpoint == '/' else ''
+    html.append('                <option value="/" ' + selected_attr + '>Raíz (/)</option>')
+    for disk in physical_disks:
+        disk_name = disk['name']
+        disk_model = disk['model'] or 'Desconocido'
+        disk_size = disk['size'] or '?'
+        disk_label = f'{disk_name} ({disk_model}, {disk_size})'
+        selected_attr = ' selected' if selected_disk_name == disk_name else ''
+        html.append('                <option value="' + disk_name + '" ' + selected_attr + '>' + disk_label + '</option>')
+    html.append('            </select>')
+    html.append('        </div>')
+    # Language switch (middle)
+    html.append('        <div class="lang-switch" role="group" aria-label="Idioma" style="display:flex;gap:0.35rem;">')
+    html.append('            <button data-lang="en" aria-label="English" style="width:auto;padding:0.35rem 0.75rem;font-size:0.7rem;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">EN</button>')
+    html.append('            <button data-lang="es" aria-label="Español" style="width:auto;padding:0.35rem 0.75rem;font-size:0.7rem;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">ESP</button>')
+    # Close button (rightmost)
+    html.append('    <button id="exitBtn" style="width:36px;height:36px;padding:0;line-height:36px;text-align:center;border-radius:9px;border:1px solid var(--fail);background:rgba(255,107,107,0.18);color:var(--fail);cursor:pointer;">X</button>')
+    html.append('    </div>')
     html.append('    </div>')
     
     # Resumen General
@@ -521,11 +638,6 @@ def generate_html():
     html.append('        Powered by mjunez - Copyright 2026')
     html.append('    </p>')
     html.append('</div>')
-    html.append('    <div class="lang-switch" role="group" aria-label="Idioma" style="position:fixed;top:12px;right:56px;z-index:9999;display:flex;gap:0.35rem;">')
-    html.append('        <button data-lang="en" aria-label="English" style="width:auto;padding:0.35rem 0.75rem;font-size:0.7rem;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">EN</button>')
-    html.append('        <button data-lang="es" aria-label="Español" style="width:auto;padding:0.35rem 0.75rem;font-size:0.7rem;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">ESP</button>')
-    html.append('    </div>')
-    html.append('    <button id="exitBtn" style="position:fixed;top:12px;right:12px;z-index:9999;width:36px;height:36px;padding:0;line-height:36px;text-align:center;border-radius:9px;border:1px solid var(--fail);background:rgba(255,107,107,0.18);color:var(--fail);cursor:pointer;">X</button>')
     html.append('    <script>')
     html.append('// i18n Engine')
     html.append('(function(){')
@@ -610,7 +722,22 @@ def generate_html():
     html.append('})();')
     html.append('')
     html.append('// Exit button & shortcuts')
-    html.append('document.getElementById("exitBtn").onclick = () => window.close();')
+    html.append('function setupExitButton() {')
+    html.append('    const exitBtn = document.getElementById("exitBtn");')
+    html.append('    if (exitBtn) {')
+    html.append('        exitBtn.onclick = () => window.close();')
+    html.append('    }')
+    html.append('}')
+    html.append('// Set up immediately')
+    html.append('setupExitButton();')
+    html.append('// Re-setup after auto-refresh')
+    html.append('if (window.applyI18n) {')
+    html.append('    const originalApply = window.applyI18n;')
+    html.append('    window.applyI18n = function() {')
+    html.append('        originalApply();')
+    html.append('        setupExitButton();')
+    html.append('    };')
+    html.append('}')
     html.append('window.addEventListener("keydown", e => { if(e.ctrlKey && e.key==="q") window.close(); });')
     html.append('(function(){')
     html.append('  const REFRESH_MS = 60000;')

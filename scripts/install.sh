@@ -79,6 +79,8 @@ chmod +x "$BIN_DIR/storage-report-app.sh"
 # 4. Instalar icono y desktop entry
 mkdir -p "$ICON_DIR"
 cp "$SOURCE_DIR/storage_report/static/assets/hdd.png" "$ICON_DIR/storage-report.png"
+# Actualizar caché de iconos
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 cat > "$DESKTOP_DIR/storage-report.desktop" << EOF
 [Desktop Entry]
@@ -86,10 +88,10 @@ Type=Application
 Name=Storage Report
 Comment=Reporte de almacenamiento local
 Exec=$BIN_DIR/storage-report-app.sh
-Icon=storage-report
+Icon=$ICON_DIR/storage-report.png
 Terminal=false
 Categories=System;Utility;
-StartupWMClass=storage-report
+StartupWMClass=chrome-localhost__storage_report.html-Default
 EOF
 
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true

@@ -18,9 +18,9 @@ REPORT_PATH = pathlib.Path("/tmp/storage_report.html")
 BASE_DIR = pathlib.Path("/tmp")
 PORT = 8888
 
-def regenerate_report():
+def regenerate_report(selected_disk=None):
     try:
-        html = generate_html()
+        html = generate_html(selected_disk)
         REPORT_PATH.write_text(html)
     except Exception:
         # Si falla, seguimos sirviendo lo que haya
@@ -33,9 +33,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         url_path = unquote(self.path.split('?',1)[0])
+        query = unquote(self.path.split('?',1)[1]) if '?' in self.path else ''
         # Normalizar
         if url_path in ('/', '/index.html', '/storage_report.html'):
-            regenerate_report()
+            # Extract disk parameter
+            selected_disk = None
+            if query:
+                for param in query.split('&'):
+                    if param.startswith('disk='):
+                        selected_disk = param.split('=',1)[1]
+                        break
+            regenerate_report(selected_disk)
             if REPORT_PATH.is_file():
                 try:
                     data = REPORT_PATH.read_bytes()
